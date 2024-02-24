@@ -622,6 +622,7 @@ namespace filesystem {
     _EXPORT_STD class path {
         template <class _Base_iter>
         friend class _Path_iterator;
+        friend struct _Dir_enum_impl;
         friend inline path absolute(const path& _Input, error_code& _Ec);
         friend inline __std_win_error _Canonical(path& _Result, const wstring& _Text);
         friend inline path temp_directory_path(error_code& _Ec);
@@ -862,7 +863,7 @@ namespace filesystem {
             return *this;
         }
 
-        void _Remove_filename_and_separator() noexcept { // remove filename and preceding non-root directory-separator
+        size_t _Remove_filename_and_separator_off() noexcept { // get the offset for _Remove_filename_and_separator
             const auto _First         = _Text.data();
             const auto _Last          = _First + _Text.size();
             const auto _Root_name_end = _Find_root_name_end(_First, _Last);
@@ -879,8 +880,12 @@ namespace filesystem {
 
             const _Reverse_iter _Rlast{_First};
 
+            return static_cast<size_t>(_Rlast - _Rslash_last);
+        }
+
+        void _Remove_filename_and_separator() noexcept { // remove filename and preceding non-root directory-separator
             _Text._Orphan_all();
-            _Text.erase(static_cast<size_t>(_Rlast - _Rslash_last));
+            _Text.erase(static_cast<size_t>(_Remove_filename_and_separator_off()));
         }
 
         path& replace_filename(const path& _Replacement) { // remove any filename from *this and append _Replacement
@@ -2598,6 +2603,7 @@ namespace filesystem {
 
         struct _Creator { // factored out part common to recursive and non-recursive implementation
             path _Path;
+            path::string_type::size_type _Path_end;
             _Find_file_handle _Dir;
             __std_fs_find_data _Find_data;
 
@@ -2608,7 +2614,7 @@ namespace filesystem {
 
             _Create_status _Status;
 
-            _Creator(const path& _Path_arg, const directory_options _Options) : _Path(_Path_arg) {
+            _Creator(const path& _Path_arg, const directory_options _Options) : _Path(_Path_arg), _Path_end(_Path._Text.size()) {
                 const auto _Error = _Open_dir(_Path, _Options, _Dir, _Find_data);
                 if (_Error == __std_win_error::_Success) {
                     _Status = {true, __std_win_error::_Success};
@@ -2622,13 +2628,15 @@ namespace filesystem {
 
         void _Refresh(const __std_fs_find_data& _Data) {
             _Entry._Refresh(_Data);
-            _Entry._Path.replace_filename(wstring_view{_Data._File_name});
+            _Entry._Path._Text.erase(_Path_end);
+            _Entry._Path /= _Data._File_name;
         }
 
         explicit _Dir_enum_impl(_Creator&& _Create_data, const directory_options = {})
             : _Dir(_STD move(_Create_data._Dir)) {
             // directory_options provided, but unused to keep signature identical to recursive_directory_iterator
             _Entry._Path = _STD move(_Create_data._Path);
+            _Path_end    = _Create_data._Path_end;
             _Refresh(_Create_data._Find_data);
         }
 
@@ -2643,6 +2651,7 @@ namespace filesystem {
         }
 
         directory_entry _Entry;
+        path::string_type::size_type _Path_end;
         _Find_file_handle _Dir;
     };
 
@@ -2828,6 +2837,7 @@ namespace filesystem {
                 _Impl._Dir = _STD move(_Impl._Stack.back());
                 _Impl._Stack.pop_back();
                 _Impl._Entry._Path._Remove_filename_and_separator();
+                _Impl._Path_end = _Impl._Entry._Path._Remove_filename_and_separator_off();
                 _Error = _Impl._Advance_and_skip_dots(_Data);
 
                 if (_Error == __std_win_error::_Success) {
@@ -2852,6 +2862,7 @@ namespace filesystem {
 
             if (_Should_recurse) {
                 _Impl._Stack.push_back(_STD move(_Impl._Dir));
+                _Impl._Path_end = _Impl._Entry._Path.native().size();
                 _Error = _Open_dir(_Impl._Entry._Path, _Impl._Options, _Impl._Dir, _Data);
             } else {
                 _Error = _Impl._Advance_and_skip_dots(_Data);
@@ -2877,6 +2888,7 @@ namespace filesystem {
                 _Impl._Dir = _STD move(_Impl._Stack.back());
                 _Impl._Stack.pop_back();
                 _Impl._Entry._Path._Remove_filename_and_separator();
+                _Impl._Path_end = _Impl._Entry._Path._Remove_filename_and_separator_off();
             }
 
             _Ptr.reset();
