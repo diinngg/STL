@@ -885,7 +885,7 @@ namespace filesystem {
 
         void _Remove_filename_and_separator() noexcept { // remove filename and preceding non-root directory-separator
             _Text._Orphan_all();
-            _Text.erase(static_cast<size_t>(_Remove_filename_and_separator_off()));
+            _Text.erase(_Remove_filename_and_separator_off());
         }
 
         path& replace_filename(const path& _Replacement) { // remove any filename from *this and append _Replacement
