@@ -2628,6 +2628,7 @@ namespace filesystem {
 
         void _Refresh(const __std_fs_find_data& _Data) {
             _Entry._Refresh(_Data);
+            _Entry._Path._Text._Orphan_all();
             _Entry._Path._Text.erase(_Path_end);
             _Entry._Path /= _Data._File_name;
         }
